@@ -1,6 +1,7 @@
 # Ultralytics YOLO 🚀, GPL-3.0 license
 
 import torch
+from pathlib import Path
 
 from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.engine.results import Results
@@ -35,8 +36,10 @@ class DetectionPredictor(BasePredictor):
 
 
 def predict(cfg=DEFAULT_CFG, use_python=False):
-    model = cfg.model or 'yolov8n.pt'
-    source = cfg.source if cfg.source is not None else ROOT / 'assets' if (ROOT / 'assets').exists() \
+    root = Path()
+    model = root / '/kikimiru_detection/yolov8_model_weights/best.pt' #cfg.model or 'yolov8n.pt'
+    # image folder for prediction
+    source = cfg.source if cfg.source is not None else ROOT / 'assets' if (ROOT / 'assets').exists()\
         else 'https://ultralytics.com/images/bus.jpg'
 
     args = dict(model=model, source=source)
