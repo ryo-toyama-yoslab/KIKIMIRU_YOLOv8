@@ -646,8 +646,8 @@ def get_settings(file=SETTINGS_YAML, version='0.0.3'):
     root = Path() # home/user_name
     datasets_root = (root.parent if git_dir and is_dir_writeable(root.parent) else root).resolve()
     defaults = {
-        #'datasets_dir': str(datasets_root / 'datasets'),  # default datasets directory. For training.
-        #'weights_dir': str(root / 'weights'),  # default weights directory. For training.
+        'datasets_dir': str(datasets_root / 'datasets'),  # default datasets directory. For training.
+        'weights_dir': str(root / 'weights'),  # default weights directory. For training.
         'runs_dir': str(root / 'kikimiru_detection/yolov8_results'),  # default runs directory.
         'uuid': hashlib.sha256(str(uuid.getnode()).encode()).hexdigest(),  # anonymized uuid hash
         'sync': True,  # sync analytics to help with YOLO development
