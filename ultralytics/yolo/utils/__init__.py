@@ -643,12 +643,12 @@ def get_settings(file=SETTINGS_YAML, version='0.0.3'):
     from ultralytics.yolo.utils.torch_utils import torch_distributed_zero_first
 
     git_dir = get_git_dir()
-    root = git_dir or Path()
+    root = Path() # home/user_name
     datasets_root = (root.parent if git_dir and is_dir_writeable(root.parent) else root).resolve()
     defaults = {
-        'datasets_dir': str(datasets_root / 'datasets'),  # default datasets directory.
-        'weights_dir': str(root / 'weights'),  # default weights directory.
-        'runs_dir': str(root / 'runs'),  # default runs directory.
+        'datasets_dir': str(datasets_root / 'datasets'),  # default datasets directory. For training.
+        'weights_dir': str(root / 'weights'),  # default weights directory. For training.
+        'runs_dir': str(root / 'kikimiru_detection/yolov8_results'),  # default runs directory.
         'uuid': hashlib.sha256(str(uuid.getnode()).encode()).hexdigest(),  # anonymized uuid hash
         'sync': True,  # sync analytics to help with YOLO development
         'api_key': '',  # Ultralytics HUB API key (https://hub.ultralytics.com/)
