@@ -1,7 +1,0 @@
-datasets_dir: /home/toyama/datasets
-weights_dir: model_weights/best.pt
-runs_dir: kikimiru_detection/yolov8_results
-uuid: 340e33ad5612070e19efad53d401f1eb1f429840923d24cdff9369cc735788ca
-sync: true
-api_key: ''
-settings_version: 0.0.3
