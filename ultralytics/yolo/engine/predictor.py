@@ -86,7 +86,7 @@ class BasePredictor:
         self.args = get_cfg(cfg, overrides)
         self.save_dir = self.get_save_dir()
         if self.args.conf is None:
-            self.args.conf = 0.25  # default conf=0.25
+            self.args.conf = 0.7  # default conf=0.25
         self.done_warmup = False
         if self.args.show:
             self.args.show = check_imshow(warn=True)
@@ -108,7 +108,8 @@ class BasePredictor:
         callbacks.add_integration_callbacks(self)
 
     def get_save_dir(self):
-        project = self.args.project or Path(SETTINGS['runs_dir']) / self.args.task
+        root_home = Path().home()
+        project = root_home / Path(SETTINGS['runs_dir'])
         name = self.args.name or f'{self.args.mode}'
         return increment_path(Path(project) / name, exist_ok=self.args.exist_ok)
 
@@ -265,6 +266,11 @@ class BasePredictor:
                     'postprocess': profilers[2].dt * 1E3 / n}
                 p, im0 = path[i], None if self.source_type.tensor else im0s[i].copy()
                 p = Path(p)
+                '''
+                p : 認識対象画像のファイルパス
+                im : 元画像の正規化済み画素値行列
+                im0 : 元画像の画素値行列
+                '''
 
                 if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
                     s += self.write_results(i, self.results, (p, im, im0))
