@@ -1,11 +1,12 @@
-# Ultralytics YOLO 🚀, GPL-3.0 license
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+
 import re
 
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
 from ultralytics.yolo.utils import LOGGER, TESTS_RUNNING
-from ultralytics.yolo.utils.torch_utils import get_flops, get_num_params
+from ultralytics.yolo.utils.torch_utils import model_info_for_loggers
 
 try:
     import clearml
@@ -19,14 +20,14 @@ except (ImportError, AssertionError):
     clearml = None
 
 
-def _log_debug_samples(files, title='Debug Samples'):
+def _log_debug_samples(files, title='Debug Samples') -> None:
     """
-        Log files (images) as debug samples in the ClearML task.
+    Log files (images) as debug samples in the ClearML task.
 
-        arguments:
-        files (List(PosixPath)) a list of file paths in PosixPath format
-        title (str) A title that groups together images with the same values
-        """
+    Args:
+        files (list): A list of file paths in PosixPath format.
+        title (str): A title that groups together images with the same values.
+    """
     task = Task.current_task()
     if task:
         for f in files:
@@ -39,23 +40,27 @@ def _log_debug_samples(files, title='Debug Samples'):
                                                iteration=iteration)
 
 
-def _log_plot(title, plot_path):
+def _log_plot(title, plot_path) -> None:
     """
-        Log image as plot in the plot section of ClearML
+    Log an image as a plot in the plot section of ClearML.
 
-        arguments:
-        title (str) Title of the plot
-        plot_path (PosixPath or str) Path to the saved image file
-        """
+    Args:
+        title (str): The title of the plot.
+        plot_path (str): The path to the saved image file.
+    """
     img = mpimg.imread(plot_path)
     fig = plt.figure()
     ax = fig.add_axes([0, 0, 1, 1], frameon=False, aspect='auto', xticks=[], yticks=[])  # no ticks
     ax.imshow(img)
 
-    Task.current_task().get_logger().report_matplotlib_figure(title, '', figure=fig, report_interactive=False)
+    Task.current_task().get_logger().report_matplotlib_figure(title=title,
+                                                              series='',
+                                                              figure=fig,
+                                                              report_interactive=False)
 
 
 def on_pretrain_routine_start(trainer):
+    """Runs at start of pretraining routine; initializes and connects/ logs task to ClearML."""
     try:
         task = Task.current_task()
         if task:
@@ -80,11 +85,19 @@ def on_pretrain_routine_start(trainer):
 
 
 def on_train_epoch_end(trainer):
-    if trainer.epoch == 1 and Task.current_task():
-        _log_debug_samples(sorted(trainer.save_dir.glob('train_batch*.jpg')), 'Mosaic')
+    task = Task.current_task()
+
+    if task:
+        """Logs debug samples for the first epoch of YOLO training."""
+        if trainer.epoch == 1:
+            _log_debug_samples(sorted(trainer.save_dir.glob('train_batch*.jpg')), 'Mosaic')
+        """Report the current training progress."""
+        for k, v in trainer.validator.metrics.results_dict.items():
+            task.get_logger().report_scalar('train', k, v, iteration=trainer.epoch)
 
 
 def on_fit_epoch_end(trainer):
+    """Reports model information to logger at the end of an epoch."""
     task = Task.current_task()
     if task:
         # You should have access to the validation bboxes under jdict
@@ -93,25 +106,25 @@ def on_fit_epoch_end(trainer):
                                         value=trainer.epoch_time,
                                         iteration=trainer.epoch)
         if trainer.epoch == 0:
-            model_info = {
-                'model/parameters': get_num_params(trainer.model),
-                'model/GFLOPs': round(get_flops(trainer.model), 3),
-                'model/speed(ms)': round(trainer.validator.speed['inference'], 3)}
-            for k, v in model_info.items():
+            for k, v in model_info_for_loggers(trainer).items():
                 task.get_logger().report_single_value(k, v)
 
 
 def on_val_end(validator):
+    """Logs validation results including labels and predictions."""
     if Task.current_task():
         # Log val_labels and val_pred
         _log_debug_samples(sorted(validator.save_dir.glob('val*.jpg')), 'Validation')
 
 
 def on_train_end(trainer):
+    """Logs final model and its name on training completion."""
     task = Task.current_task()
     if task:
         # Log final results, CM matrix + PR plots
-        files = ['results.png', 'confusion_matrix.png', *(f'{x}_curve.png' for x in ('F1', 'PR', 'P', 'R'))]
+        files = [
+            'results.png', 'confusion_matrix.png', 'confusion_matrix_normalized.png',
+            *(f'{x}_curve.png' for x in ('F1', 'PR', 'P', 'R'))]
         files = [(trainer.save_dir / f) for f in files if (trainer.save_dir / f).exists()]  # filter
         for f in files:
             _log_plot(title=f.stem, plot_path=f)

@@ -1,21 +1,17 @@
-# Ultralytics YOLO 🚀, GPL-3.0 license
+# Ultralytics YOLO 🚀, AGPL-3.0 license
 
 import torch
+from pathlib import Path
 
 from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.engine.results import Results
-from ultralytics.yolo.utils import DEFAULT_CFG, ROOT, ops
+from ultralytics.yolo.utils import DEFAULT_CFG, ROOT, ops, SETTINGS
 
 
 class DetectionPredictor(BasePredictor):
 
-    def preprocess(self, img):
-        img = (img if isinstance(img, torch.Tensor) else torch.from_numpy(img)).to(self.model.device)
-        img = img.half() if self.model.fp16 else img.float()  # uint8 to fp16/32
-        img /= 255  # 0 - 255 to 0.0 - 1.0
-        return img
-
     def postprocess(self, preds, img, orig_imgs):
+        """Postprocesses predictions and returns a list of Results objects."""
         preds = ops.non_max_suppression(preds,
                                         self.args.conf,
                                         self.args.iou,
@@ -28,16 +24,21 @@ class DetectionPredictor(BasePredictor):
             orig_img = orig_imgs[i] if isinstance(orig_imgs, list) else orig_imgs
             if not isinstance(orig_imgs, torch.Tensor):
                 pred[:, :4] = ops.scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
-            path, _, _, _, _ = self.batch
+            path = self.batch[0]
             img_path = path[i] if isinstance(path, list) else path
             results.append(Results(orig_img=orig_img, path=img_path, names=self.model.names, boxes=pred))
         return results
 
 
 def predict(cfg=DEFAULT_CFG, use_python=False):
-    model = cfg.model or 'yolov8n.pt'
-    source = cfg.source if cfg.source is not None else ROOT / 'assets' if (ROOT / 'assets').exists() \
-        else 'https://ultralytics.com/images/bus.jpg'
+    # "yolo detect predict"コマンドではここは呼ばれない
+    root_home = Path().home()
+    """Runs YOLO model inference on input image(s)."""
+    # model = cfg.model or 'yolov8n.pt'
+    model = str(root_home / Path(SETTINGS['weights_dir'])) # 学習済みモデル重み
+    sorce_path = str(root_home / Path(SETTINGS['source']))
+    source = sorce_path if sorce_path is not None \
+        else root_home / 'assets' # 認識対象画像フォルダ
 
     args = dict(model=model, source=source)
     if use_python:
