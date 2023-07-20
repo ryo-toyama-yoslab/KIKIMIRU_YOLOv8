@@ -1,9 +1,10 @@
-# Ultralytics YOLO 🚀, GPL-3.0 license
+# Ultralytics YOLO 🚀, AGPL-3.0 license
 
 import requests
 
 from ultralytics.hub.auth import Auth
 from ultralytics.hub.utils import PREFIX
+from ultralytics.yolo.data.utils import HUBDatasetStats
 from ultralytics.yolo.utils import LOGGER, SETTINGS, USER_CONFIG_DIR, yaml_save
 
 
@@ -54,7 +55,7 @@ model.train()""")
 
 
 def reset_model(model_id=''):
-    # Reset a trained model to an untrained state
+    """Reset a trained model to an untrained state."""
     r = requests.post('https://api.ultralytics.com/model-reset', json={'apiKey': Auth().api_key, 'modelId': model_id})
     if r.status_code == 200:
         LOGGER.info(f'{PREFIX}Model reset successfully')
@@ -63,25 +64,23 @@ def reset_model(model_id=''):
 
 
 def export_fmts_hub():
-    # Returns a list of HUB-supported export formats
+    """Returns a list of HUB-supported export formats."""
     from ultralytics.yolo.engine.exporter import export_formats
     return list(export_formats()['Argument'][1:]) + ['ultralytics_tflite', 'ultralytics_coreml']
 
 
 def export_model(model_id='', format='torchscript'):
-    # Export a model to all formats
+    """Export a model to all formats."""
     assert format in export_fmts_hub(), f"Unsupported export format '{format}', valid formats are {export_fmts_hub()}"
-    r = requests.post('https://api.ultralytics.com/export',
-                      json={
-                          'apiKey': Auth().api_key,
-                          'modelId': model_id,
-                          'format': format})
+    r = requests.post(f'https://api.ultralytics.com/v1/models/{model_id}/export',
+                      json={'format': format},
+                      headers={'x-api-key': Auth().api_key})
     assert r.status_code == 200, f'{PREFIX}{format} export failure {r.status_code} {r.reason}'
     LOGGER.info(f'{PREFIX}{format} export started ✅')
 
 
 def get_export(model_id='', format='torchscript'):
-    # Get an exported model dictionary with download URL
+    """Get an exported model dictionary with download URL."""
     assert format in export_fmts_hub(), f"Unsupported export format '{format}', valid formats are {export_fmts_hub()}"
     r = requests.post('https://api.ultralytics.com/get-export',
                       json={
@@ -90,6 +89,28 @@ def get_export(model_id='', format='torchscript'):
                           'format': format})
     assert r.status_code == 200, f'{PREFIX}{format} get_export failure {r.status_code} {r.reason}'
     return r.json()
+
+
+def check_dataset(path='', task='detect'):
+    """
+    Function for error-checking HUB dataset Zip file before upload. It checks a dataset for errors before it is
+    uploaded to the HUB. Usage examples are given below.
+
+    Args:
+        path (str, optional): Path to data.zip (with data.yaml inside data.zip). Defaults to ''.
+        task (str, optional): Dataset task. Options are 'detect', 'segment', 'pose', 'classify'. Defaults to 'detect'.
+
+    Example:
+        ```python
+        from ultralytics.hub import check_dataset
+
+        check_dataset('path/to/coco8.zip', task='detect')  # detect dataset
+        check_dataset('path/to/coco8-seg.zip', task='segment')  # segment dataset
+        check_dataset('path/to/coco8-pose.zip', task='pose')  # pose dataset
+        ```
+    """
+    HUBDatasetStats(path=path, task=task).get_json()
+    LOGGER.info('Checks completed correctly ✅. Upload this dataset to https://hub.ultralytics.com/datasets/.')
 
 
 if __name__ == '__main__':
