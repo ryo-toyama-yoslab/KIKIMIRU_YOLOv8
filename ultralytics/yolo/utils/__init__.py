@@ -547,7 +547,7 @@ def get_default_args(func):
     return {k: v.default for k, v in signature.parameters.items() if v.default is not inspect.Parameter.empty}
 
 
-def get_user_config_dir(sub_dir='Ultralytics'):
+def get_user_config_dir(sub_dir='Predict'):#(sub_dir='Ultralytics'):
     """
     Get the user config directory.
 
@@ -713,7 +713,7 @@ def set_sentry():
             logging.getLogger(logger).setLevel(logging.CRITICAL)
 
 
-def get_settings(file=SETTINGS_YAML, version='0.0.3'):
+def get_settings(file=SETTINGS_YAML, version='0.1'):
     """
     Loads a global Ultralytics settings YAML file or creates one with default values if it does not exist.
 
@@ -729,13 +729,12 @@ def get_settings(file=SETTINGS_YAML, version='0.0.3'):
     from ultralytics.yolo.utils.checks import check_version
     from ultralytics.yolo.utils.torch_utils import torch_distributed_zero_first
 
-    git_dir = get_git_dir()
-    root = git_dir or Path()
-    datasets_root = (root.parent if git_dir and is_dir_writeable(root.parent) else root).resolve()
-    defaults = {
-        'datasets_dir': str(datasets_root / 'datasets'),  # default datasets directory.
-        'weights_dir': str(root / 'weights'),  # default weights directory.
-        'runs_dir': str(root / 'runs'),  # default runs directory.
+    root = Path()
+    defaults = { # versionの値を変更すると更新できる
+        'datasets_dir': 'temp_img',  # default datasets directory.
+        'source': 'image_dir',
+        'weights_dir': 'model_weights/best.pt',  # default weights directory.
+        'runs_dir': 'kikimiru_detection/yolov8_results',  # default runs directory.
         'uuid': hashlib.sha256(str(uuid.getnode()).encode()).hexdigest(),  # SHA-256 anonymized UUID hash
         'sync': True,  # sync analytics to help with YOLO development
         'api_key': '',  # Ultralytics HUB API key (https://hub.ultralytics.com/)
@@ -793,7 +792,7 @@ def url2file(url):
 # Run below code on yolo/utils init ------------------------------------------------------------------------------------
 
 # Check first-install steps
-PREFIX = colorstr('Ultralytics: ')
+PREFIX = colorstr('Predict: ')
 SETTINGS = get_settings()
 DATASETS_DIR = Path(SETTINGS['datasets_dir'])  # global datasets directory
 ENVIRONMENT = 'Colab' if is_colab() else 'Kaggle' if is_kaggle() else 'Jupyter' if is_jupyter() else \
