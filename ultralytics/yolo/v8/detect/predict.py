@@ -1,10 +1,11 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 
 import torch
+from pathlib import Path
 
 from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.engine.results import Results
-from ultralytics.yolo.utils import DEFAULT_CFG, ROOT, ops
+from ultralytics.yolo.utils import DEFAULT_CFG, ROOT, ops, SETTINGS
 
 
 class DetectionPredictor(BasePredictor):
@@ -30,11 +31,15 @@ class DetectionPredictor(BasePredictor):
 
 
 def predict(cfg=DEFAULT_CFG, use_python=False):
+    # "yolo detect predict"コマンドではここは呼ばれない
+    root_home = Path().home()
     """Runs YOLO model inference on input image(s)."""
-    model = 'model_weights/best.pt' #cfg.model or 'yolov8n.pt'
-    source = 'temp_img'
-    #cfg.source if cfg.source is not None else ROOT / 'assets' if (ROOT / 'assets').exists() \
-    #    else 'https://ultralytics.com/images/bus.jpg'
+    # model = cfg.model or 'yolov8n.pt'
+    model = str(root_home / Path(SETTINGS['weights_dir'])) # 学習済みモデル重み
+    sorce_path = str(root_home / Path(SETTINGS['source']))
+    source = sorce_path if sorce_path is not None \
+        else root_home / 'assets' # 認識対象画像フォルダ
+
     args = dict(model=model, source=source)
     if use_python:
         from ultralytics import YOLO
