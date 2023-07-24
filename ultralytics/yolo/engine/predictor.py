@@ -33,6 +33,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+import yaml
+import datetime
+import re
 
 from ultralytics.nn.autobackend import AutoBackend
 from ultralytics.yolo.cfg import get_cfg
@@ -84,7 +87,7 @@ class BasePredictor:
             overrides (dict, optional): Configuration overrides. Defaults to None.
         """
         self.args = get_cfg(cfg, overrides)
-        self.save_dir = self.get_save_dir()
+        self.save_dir = None
         if self.args.conf is None:
             self.args.conf = 0.7  # default conf=0.25
         self.done_warmup = False
@@ -107,11 +110,59 @@ class BasePredictor:
         self.callbacks = _callbacks or callbacks.get_default_callbacks()
         callbacks.add_integration_callbacks(self)
 
+    def yaml_save(self, file='data.yaml', data=None):
+        if data is None:
+            data = {}
+        file = Path(file)
+        if not file.parent.exists():
+            # Create parent directories if they don't exist
+            file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Convert Path objects to strings
+        for k, v in data.items():
+            if isinstance(v, Path):
+                data[k] = str(v)
+
+        # Dump data to file in YAML format
+        with open(file, 'w') as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+    
+    def setting_dir_yaml_load(file="", append_filename=False):
+        file = file = Path().home() / "yolov8_config/Predict/save_dir.yaml"
+        
+        with open(file, errors='ignore', encoding='utf-8') as f:
+            s = f.read()  # string
+
+            # Remove special characters
+            if not s.isprintable():
+                s = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD\U00010000-\U0010ffff]+', '', s)
+
+            # Add YAML filename to dict and return
+            return {**yaml.safe_load(s), 'yaml_file': str(file)} if append_filename else yaml.safe_load(s)
+
     def get_save_dir(self):
         root_home = Path().home()
         project = root_home / Path(SETTINGS['runs_dir'])
-        name = self.args.name or f'{self.args.mode}'
-        return increment_path(Path(project) / name, exist_ok=self.args.exist_ok)
+        '''
+        "yolov8_config/Predict/save_dir.yaml"で保存されている出力先フォルダを読み込み
+        '''
+        save_file_setting = self.setting_dir_yaml_load() # 現在時間を名前にしたフォルダ名を読み込む
+        
+        return increment_path(Path(project) / save_file_setting['time'], exist_ok=self.args.exist_ok)
+    
+    def setting_save_dir(self):
+
+        # アプリが開始されたことを検知した時間で作られるフォルダパスを読み書きするファイル
+        file = Path().home() / "yolov8_config/Predict/save_dir.yaml"
+
+        dt_now = datetime.datetime.now()
+        
+        defaults = {
+            'time': dt_now.strftime('%Y%m%d%H%M%S') # now time
+            }
+        
+        self.yaml_save(file, defaults)
+    
 
     def preprocess(self, im):
         """Prepares input image before inference.
@@ -223,6 +274,25 @@ class BasePredictor:
         # Setup model
         if not self.model:
             self.setup_model(model)
+        
+        '''この場所に処理を追加
+        
+        1. 認識対象画像が保存されるフォルダに画像が来たかを監視する処理
+
+        2. 画像保存を確認したらその時間を元に出力先のフォルダを作成
+             - save_dir.yamlに出力先のフォルダ名を書き込み(setting_save_dir関数)
+               get_save_dir関数でそのyamlファイルを読み込んで出力先を指定
+           アプリが実行中だと考えられる間は画像フォルダに保存される画像を読み込み続ける
+             - 一定時間画像が保存されなかったらアプリが実行されていないと判断して処理を終了する
+
+        3. 再びフォルダに画像が保存されるかを監視する処理に戻る
+
+        '''
+
+        # setting save_dir
+        self.setting_save_dir()
+
+        self.save_dir = self.get_save_dir()
 
         # Setup source every time predict is called
         self.setup_source(source if source is not None else self.args.source)
