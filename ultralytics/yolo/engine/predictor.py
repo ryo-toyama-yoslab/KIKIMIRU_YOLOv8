@@ -31,11 +31,15 @@ import platform
 from pathlib import Path
 
 import cv2
+import os
 import numpy as np
 import torch
 import yaml
+import shutil
+import time
 import datetime
 import re
+import sys
 
 from ultralytics.nn.autobackend import AutoBackend
 from ultralytics.yolo.cfg import get_cfg
@@ -45,6 +49,8 @@ from ultralytics.yolo.utils import DEFAULT_CFG, LOGGER, MACOS, SETTINGS, WINDOWS
 from ultralytics.yolo.utils.checks import check_imgsz, check_imshow
 from ultralytics.yolo.utils.files import increment_path
 from ultralytics.yolo.utils.torch_utils import select_device, smart_inference_mode
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 STREAM_WARNING = """
     WARNING ⚠️ stream/video/webcam/dir predict source will accumulate results in RAM unless `stream=True` is passed,
@@ -265,6 +271,28 @@ class BasePredictor:
             LOGGER.warning(STREAM_WARNING)
         self.vid_path, self.vid_writer = [None] * self.dataset.bs, [None] * self.dataset.bs
 
+    class MyHandler(FileSystemEventHandler):
+
+        def __init__(self, observer):
+            self.observer = observer
+
+        def on_created(self, event):
+            if event.is_directory:
+                return
+            self.observer.stop()
+
+    def watch_folder(self, folder_path):
+        observer = Observer()
+        event_handler = self.MyHandler(observer)
+        observer.schedule(event_handler, path=folder_path, recursive=False)
+        observer.start()
+        try:
+            while observer.is_alive():
+                time.sleep(0.01) # 監視処理の間隔を0.01秒にして負荷軽減
+        except KeyboardInterrupt:
+            sys.exit()
+            
+
     @smart_inference_mode()
     def stream_inference(self, source=None, model=None, *args, **kwargs):
         """Streams real-time inference on camera feed and saves results to file."""
@@ -274,7 +302,7 @@ class BasePredictor:
         # Setup model
         if not self.model:
             self.setup_model(model)
-        
+
         '''この場所に処理を追加
         
         1. 認識対象画像が保存されるフォルダに画像が来たかを監視する処理
@@ -289,90 +317,131 @@ class BasePredictor:
 
         '''
 
-        # setting save_dir
-        self.setting_save_dir()
+        while True:# 認識対象画像フォルダの変更を監視 新規画像が入ってきたら認識ループに入る
+            folder_path = source if source is not None else self.args.source
+            print("start watch_folder")
+            self.watch_folder(folder_path)
+            print("end watch_folder")
 
-        self.save_dir = self.get_save_dir()
+            # setting save_dir
+            self.setting_save_dir()
 
-        # Setup source every time predict is called
-        self.setup_source(source if source is not None else self.args.source)
+            # setup save_dir from yaml file
+            self.save_dir = self.get_save_dir()
 
-        # Check if save_dir/ label file exists
-        if self.args.save or self.args.save_txt:
-            (self.save_dir / 'labels' if self.args.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
+            # Check if save_dir/ label file exists
+            if self.args.save or self.args.save_txt:
+                (self.save_dir / 'labels' if self.args.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
+                (self.save_dir / 'predicted_image' if self.args.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
 
-        # Warmup model
-        if not self.done_warmup:
-            self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
-            self.done_warmup = True
+            #----------------------- 認識ループ開始位置 -----------------------#
+            predict_flag = True
+            while predict_flag:
+                print("start predict")
+                time.sleep(0.01) # 0.01秒の待機時間を設定(画像フォルダに画像が保存されるまで待機)
 
-        self.seen, self.windows, self.batch, profilers = 0, [], None, (ops.Profile(), ops.Profile(), ops.Profile())
-        self.run_callbacks('on_predict_start')
-        for batch in self.dataset:
-            self.run_callbacks('on_predict_batch_start')
-            self.batch = batch
-            path, im0s, vid_cap, s = batch
+                # Setup source every time predict is called - 認識対象画像データ読み込み
+                self.setup_source(source if source is not None else self.args.source)
 
-            # Preprocess
-            with profilers[0]:
-                im = self.preprocess(im0s)
+                # Warmup model 
+                if not self.done_warmup:
+                    self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
+                    self.done_warmup = True
 
-            # Inference
-            with profilers[1]:
-                preds = self.inference(im, *args, **kwargs)
+                self.seen, self.windows, self.batch, profilers = 0, [], None, (ops.Profile(), ops.Profile(), ops.Profile())
+                self.run_callbacks('on_predict_start')
+                for batch in self.dataset:
+                    self.run_callbacks('on_predict_batch_start')
+                    self.batch = batch
+                    path, im0s, vid_cap, s = batch
 
-            # Postprocess
-            with profilers[2]:
-                self.results = self.postprocess(preds, im, im0s)
-            self.run_callbacks('on_predict_postprocess_end')
+                    # Preprocess
+                    with profilers[0]:
+                        im = self.preprocess(im0s)
 
-            # Visualize, save, write results
-            n = len(im0s)
-            for i in range(n):
-                self.seen += 1
-                self.results[i].speed = {
-                    'preprocess': profilers[0].dt * 1E3 / n,
-                    'inference': profilers[1].dt * 1E3 / n,
-                    'postprocess': profilers[2].dt * 1E3 / n}
-                p, im0 = path[i], None if self.source_type.tensor else im0s[i].copy()
-                p = Path(p)
-                '''
-                p : 認識対象画像のファイルパス
-                im : 元画像の正規化済み画素値行列
-                im0 : 元画像の画素値行列
-                '''
+                    # Inference
+                    with profilers[1]:
+                        preds = self.inference(im, *args, **kwargs)
 
-                if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
-                    s += self.write_results(i, self.results, (p, im, im0))
-                if self.args.save or self.args.save_txt:
-                    self.results[i].save_dir = self.save_dir.__str__()
-                if self.args.show and self.plotted_img is not None:
-                    self.show(p)
-                if self.args.save and self.plotted_img is not None:
-                    self.save_preds(vid_cap, i, str(self.save_dir / p.name))
+                    # Postprocess
+                    with profilers[2]:
+                        self.results = self.postprocess(preds, im, im0s)
+                    self.run_callbacks('on_predict_postprocess_end')
 
-            self.run_callbacks('on_predict_batch_end')
-            yield from self.results
+                    # Visualize, save, write results
+                    n = len(im0s)
+                    for i in range(n):
+                        self.seen += 1
+                        self.results[i].speed = {
+                            'preprocess': profilers[0].dt * 1E3 / n,
+                            'inference': profilers[1].dt * 1E3 / n,
+                            'postprocess': profilers[2].dt * 1E3 / n}
+                        p, im0 = path[i], None if self.source_type.tensor else im0s[i].copy()
+                        p = Path(p)
+                        '''
+                        p : 認識対象画像のファイルパス
+                        im : 元画像の正規化済み画素値行列
+                        im0 : 元画像の画素値行列
+                        '''
 
-            # Print time (inference-only)
-            if self.args.verbose:
-                LOGGER.info(f'{s}{profilers[1].dt * 1E3:.1f}ms')
+                        if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
+                            s += self.write_results(i, self.results, (p, im, im0))
+                        if self.args.save or self.args.save_txt:
+                            self.results[i].save_dir = self.save_dir.__str__()
+                        if self.args.show and self.plotted_img is not None:
+                            self.show(p)
+                        if self.args.save and self.plotted_img is not None:
+                            self.save_preds(vid_cap, i, str(self.save_dir / p.name))
+                        
+                    self.run_callbacks('on_predict_batch_end')
+                    yield from self.results
 
-        # Release assets
-        if isinstance(self.vid_writer[-1], cv2.VideoWriter):
-            self.vid_writer[-1].release()  # release final video writer
+                    # Print time (inference-only)
+                    if self.args.verbose:
+                        LOGGER.info(f'{s}{profilers[1].dt * 1E3:.1f}ms')
+                    
+                    # 認識済み画像kikimiru_detection/yolov8_results/{推論開始時間}/predicted_imageフォルダ
+                    file_name = os.path.basename(p)
+                    path_to_move = self.save_dir / 'predicted_image' /  file_name
 
-        # Print results
-        if self.args.verbose and self.seen:
-            t = tuple(x.t / self.seen * 1E3 for x in profilers)  # speeds per image
-            LOGGER.info(f'Speed: %.1fms preprocess, %.1fms inference, %.1fms postprocess per image at shape '
-                        f'{(1, 3, *im.shape[2:])}' % t)
-        if self.args.save or self.args.save_txt or self.args.save_crop:
-            nl = len(list(self.save_dir.glob('labels/*.txt')))  # number of labels
-            s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ''
-            LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
+                    try:
+                        shutil.move(str(p), str(path_to_move))
+                    except FileNotFoundError:
+                        print("File not found from which to move")
+                    except PermissionError:
+                        print("The source or destination file does not have access permissions")
+                    except shutil.Error as e:
+                        print(f"Failed to move file : {e}")
+                
+                # 認識対象画像フォルダに画像があるかを確認
+                files_in_folder = os.listdir(folder_path)
+                if len(files_in_folder) == 0:
+                    time_predict_start = time.time()
+                    print("no image in folder, so wait for 5 seconds")
+                    while True:
+                        time.sleep(0.001) # 0.001秒の待機時間を設定(画像があるかを確認する間隔)
+                        files_in_folder = os.listdir(folder_path)
+                        if len(files_in_folder) > 0:
+                            break
+                        if time.time() - time_predict_start > 5: # 5秒間入力画像がなければ認識状態から画像待機状態に移行
+                            # Release assets
+                            if isinstance(self.vid_writer[-1], cv2.VideoWriter):
+                                self.vid_writer[-1].release()  # release final video writer
+                            # Print results
+                            if self.args.verbose and self.seen:
+                                t = tuple(x.t / self.seen * 1E3 for x in profilers)  # speeds per image
+                                LOGGER.info(f'Speed: %.1fms preprocess, %.1fms inference, %.1fms postprocess per image at shape '
+                                            f'{(1, 3, *im.shape[2:])}' % t)
+                            if self.args.save or self.args.save_txt or self.args.save_crop:
+                                nl = len(list(self.save_dir.glob('labels/*.txt')))  # number of labels
+                                s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ''
+                                LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
+                            self.run_callbacks('on_predict_end')
 
-        self.run_callbacks('on_predict_end')
+                            predict_flag = False
+                            break
+            #----------------------- 認識ループ終了位置 -----------------------#
+        
 
     def setup_model(self, model, verbose=True):
         """Initialize YOLO model with given parameters and set it to evaluation mode."""
