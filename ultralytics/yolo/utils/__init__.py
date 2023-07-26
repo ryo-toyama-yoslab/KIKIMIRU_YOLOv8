@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
+import datetime
 
 from ultralytics import __version__
 
@@ -563,7 +564,7 @@ def get_user_config_dir(sub_dir='Predict'):#(sub_dir='Ultralytics'):
     elif MACOS:  # macOS
         path = Path.home() / 'Library' / 'Application Support' / sub_dir
     elif LINUX:
-        path = Path.home() / 'anaconda3/envs/yolov8-py39/lib/python3.9/site-packages/ultralytics/.config' / sub_dir
+        path = Path.home() / 'yolov8_config' / sub_dir
     else:
         raise ValueError(f'Unsupported operating system: {platform.system()}')
 
@@ -729,7 +730,6 @@ def get_settings(file=SETTINGS_YAML, version='0.1'):
     from ultralytics.yolo.utils.checks import check_version
     from ultralytics.yolo.utils.torch_utils import torch_distributed_zero_first
 
-    root = Path()
     defaults = { # versionの値を変更すると更新できる
         'datasets_dir': 'temp_img',  # default datasets directory.
         'source': 'image_dir',
@@ -790,8 +790,9 @@ def url2file(url):
 
 
 # Run below code on yolo/utils init ------------------------------------------------------------------------------------
-
 # Check first-install steps
+dt_now = datetime.datetime.now()
+print(f"time_init_ : {dt_now.strftime('%Y%m%d%H%M%S')}")
 PREFIX = colorstr('Predict: ')
 SETTINGS = get_settings()
 DATASETS_DIR = Path(SETTINGS['datasets_dir'])  # global datasets directory

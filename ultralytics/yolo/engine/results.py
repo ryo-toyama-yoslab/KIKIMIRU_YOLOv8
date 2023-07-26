@@ -285,10 +285,15 @@ class Results(SimpleClass):
         kpts = self.keypoints
         texts = []
         if probs is not None:
-            # Classify
+            # Classify 分類タスクなので物体検出タスクでは関係ない
             [texts.append(f'{probs.data[j]:.2f} {self.names[j]}') for j in probs.top5]
         elif boxes:
             # Detect/segment/pose
+            '''
+            d.cls : 認識対象のラベルクラス番号(0~5)
+            d.conf : 認識結果の信頼度
+            d.xymhn : 認識結果の座標
+            '''
             for j, d in enumerate(boxes):
                 c, conf, id = int(d.cls), float(d.conf), None if d.id is None else int(d.id.item())
                 line = (c, *d.xywhn.view(-1))
@@ -300,7 +305,6 @@ class Results(SimpleClass):
                     line += (*kpt.reshape(-1).tolist(), )
                 line += (conf, ) * save_conf + (() if id is None else (id, ))
                 texts.append(('%g ' * len(line)).rstrip() % line)
-
         if texts:
             with open(txt_file, 'a') as f:
                 f.writelines(text + '\n' for text in texts)
