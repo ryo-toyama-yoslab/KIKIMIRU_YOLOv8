@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
+import datetime
 
 from ultralytics import __version__
 
@@ -789,8 +790,9 @@ def url2file(url):
 
 
 # Run below code on yolo/utils init ------------------------------------------------------------------------------------
-print("-----------------__init__-------------------")
 # Check first-install steps
+dt_now = datetime.datetime.now()
+print(f"time_init_ : {dt_now.strftime('%Y%m%d%H%M%S')}")
 PREFIX = colorstr('Predict: ')
 SETTINGS = get_settings()
 DATASETS_DIR = Path(SETTINGS['datasets_dir'])  # global datasets directory
