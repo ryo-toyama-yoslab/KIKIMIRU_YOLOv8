@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import os
 import torch
 
 from ultralytics.yolo.data.augment import LetterBox
@@ -308,6 +309,7 @@ class Results(SimpleClass):
         if texts:
             with open(txt_file, 'a') as f:
                 f.writelines(text + '\n' for text in texts)
+                os.chmod(txt_file,0o775)
 
     def save_crop(self, save_dir, file_name=Path('im.jpg')):
         """
