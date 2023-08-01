@@ -406,6 +406,7 @@ class BasePredictor:
 
                     try:
                         shutil.move(str(p), str(path_to_move))
+                        os.chmod(str(path_to_move),0o740)
                     except FileNotFoundError:
                         print("File not found from which to move")
                     except PermissionError:
@@ -473,6 +474,7 @@ class BasePredictor:
         # Save imgs
         if self.dataset.mode == 'image':
             cv2.imwrite(save_path, im0)
+            os.chmod(save_path,0o740)
         else:  # 'video' or 'stream'
             if self.vid_path[idx] != save_path:  # new video
                 self.vid_path[idx] = save_path
