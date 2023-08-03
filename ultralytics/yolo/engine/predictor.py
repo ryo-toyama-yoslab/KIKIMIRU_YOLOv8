@@ -291,6 +291,71 @@ class BasePredictor:
                 time.sleep(0.01) # 監視処理の間隔を0.01秒にして負荷軽減
         except KeyboardInterrupt:
             sys.exit()
+    
+    # Specific medical practice
+    def specificResult(results):
+        post_result = "unknown" #認識はしたが，特定できないときはunknown
+        # Start specific medical practice
+        mark_num = results.count('mark_needle')
+        spinal_num = results.count('spinal_needle')
+        catheter_num = results.count('central_venous_catheter')
+        wire_num = results.count('guide_wire')
+        bottle_orange_num = results.count('blood_cl_bottle_orange')
+        bottle_blue_num = results.count('blood_cl_bottle_blue')
+        
+        results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
+        
+        mark_rate = mark_num / results_sum
+        spinal_rate = spinal_num / results_sum
+        catheter_rate = catheter_num / results_sum
+        gwire_rate = wire_num / results_sum
+        bottle_orange_rate = bottle_orange_num / results_sum
+        bottle_blue_rate = bottle_blue_num /results_sum
+
+        #print(f"result_rate  mark_rate:{mark_rate} spinal_rate:{spinal_rate} catheter_rate:{catheter_rate} gwire_rate:{gwire_rate} bottle_orange_rate:{bottle_orange_rate} bottle_blue_rate:{bottle_blue_rate}")
+        
+        results_rate = {'mark_needle' : mark_rate, 'spinal_needle' : spinal_rate, 'central_venous_catheter' : catheter_rate, 'guide_wire' : gwire_rate, 'blood_cl_bottle_orange' : bottle_orange_rate, 'blood_cl_bottle_blue' : bottle_blue_rate}
+        results_rate = sorted(results_rate.items(), key=lambda x: x[1], reverse=True)
+        
+        print(results_rate)
+
+        top_rate_results = [results_rate[0][0]] #認識割合のトップ(複数抽出可)
+        for i in range(len(results_rate)-1):
+            if results_rate[i+1][1] == results_rate[0][1]:
+                top_rate_results.append(results_rate[i+1][0])
+            else:
+                break
+        
+        #1種類の医療機器だけが認識率トップ場合に特定できる医療行為
+        if len(top_rate_results) == 1:
+            if top_rate_results[0] == "mark_needle": #骨髄穿刺と判断
+                post_result = "kotuzui"
+                return post_result
+            elif top_rate_results[0] == "spinal_needle": #腰椎穿刺と判断
+                post_result = "youtui"
+                return post_result
+            #カテーテルとガイドワイヤーのどちらかが認識率トップかつ両方とも認識されている場合は中心静脈カテーテル挿入と判断
+            elif 'central_venous_catheter' in top_rate_results or 'guide_wire' in top_rate_results:
+                if catheter_rate > 0 and gwire_rate > 0: 
+                    post_result = "catheter"
+                    return post_result
+            #オレンジと青のボトルのどちらかが認識率トップかつ両方とも認識されている場合は血液培養と判断
+            elif 'blood_cl_bottle_orange' in top_rate_results or 'blood_cl_bottle_blue' in top_rate_results:
+                if bottle_orange_rate > 0 and bottle_blue_rate > 0: 
+                    post_result = "blood"
+                    return post_result
+            
+        #2種類の医療機器だけの認識率が最も高い場合に特定できる医療行為
+        if len(top_rate_results) == 2:
+            #認識率トップの2種類がカテーテルとガイドワイヤーの場合は中心静脈カテーテル挿入と判断
+            if 'central_venous_catheter' in top_rate_results and 'guide_wire' in top_rate_results:
+                post_result = "catheter"
+                return post_result
+            elif 'blood_cl_bottle_orange' in top_rate_results and 'blood_cl_bottle_blue' in top_rate_results:
+                post_result = "blood"
+                return post_result
+            
+        return post_result
             
 
     @smart_inference_mode()
