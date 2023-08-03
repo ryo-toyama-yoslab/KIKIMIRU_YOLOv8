@@ -237,7 +237,6 @@ class BasePredictor:
             result.save_txt(f'{self.txt_path}.txt', save_conf=self.args.save_conf)
         if self.args.save_crop:
             result.save_crop(save_dir=self.save_dir / 'crops', file_name=self.data_path.stem)
-
         return log_string
 
     def postprocess(self, preds, img, orig_imgs):
@@ -401,6 +400,7 @@ class BasePredictor:
 
             #----------------------- 認識ループ開始位置 -----------------------#
             predict_flag = True
+            predicted_label_log = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0} # 予測結果ラベルを記録しておく辞書
             while predict_flag:
                 print("start predict")
                 time.sleep(0.01) # 0.01秒の待機時間を設定(画像フォルダに画像が保存されるまで待機)
@@ -448,9 +448,14 @@ class BasePredictor:
                         im : 元画像の正規化済み画素値行列
                         im0 : 元画像の画素値行列
                         '''
-
                         if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
                             s += self.write_results(i, self.results, (p, im, im0))
+                            label_list = self.results[i].get_prdLabel_list() # 認識結果のラベル番号をリストで取得 1枚に複数結果なら複数の番号
+                            if len(label_list) > 0:
+                                for label in range(len(label_list)):
+                                    label_num = label_list[label]
+                                    predicted_label_log[label_num] = predicted_label_log[label_num] + 1
+                            print(f"predicted_label_log : {predicted_label_log}")
                         if self.args.save or self.args.save_txt:
                             self.results[i].save_dir = self.save_dir.__str__()
                         if self.args.show and self.plotted_img is not None:
@@ -483,7 +488,6 @@ class BasePredictor:
                 files_in_folder = os.listdir(folder_path)
                 if len(files_in_folder) == 0:
                     time_predict_start = time.time()
-                    print("no image in folder, so wait for 5 seconds")
                     while True:
                         time.sleep(0.001) # 0.001秒の待機時間を設定(画像があるかを確認する間隔)
                         files_in_folder = os.listdir(folder_path)
@@ -503,7 +507,7 @@ class BasePredictor:
                                 s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ''
                                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
                             self.run_callbacks('on_predict_end')
-
+                            predicted_label_log = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0}
                             predict_flag = False
                             break
             #----------------------- 認識ループ終了位置 -----------------------#
