@@ -292,68 +292,102 @@ class BasePredictor:
             sys.exit()
     
     # Specific medical practice
-    def specificResult(results):
-        post_result = "unknown" #認識はしたが，特定できないときはunknown
+    def specificResult(self, results_list): # ラベル番号と認識数の辞書型リストが引数
+        """
+        results_listのインデックスとラベル名の対応
+        0 : 'blood_cl_bottle_blue'
+        1 : 'blood_cl_bottle_orange'
+        2 : 'central_venous_catheter'
+        3 : 'guide_wire'
+        4 : 'mark_needle'
+        5 : 'spinal_needle'
+        """
+        
+        # 特定できないときはunknown
+        post_result = "unknown" 
+
+        # 各医療機器認識割合を格納するリスト
+        results_rate = [0] * 6
+
         # Start specific medical practice
-        mark_num = results.count('mark_needle')
-        spinal_num = results.count('spinal_needle')
-        catheter_num = results.count('central_venous_catheter')
-        wire_num = results.count('guide_wire')
-        bottle_orange_num = results.count('blood_cl_bottle_orange')
-        bottle_blue_num = results.count('blood_cl_bottle_blue')
+        # mark_num = results.count('mark_needle')
+        # spinal_num = results.count('spinal_needle')
+        # catheter_num = results.count('central_venous_catheter')
+        # wire_num = results.count('guide_wire')
+        # bottle_orange_num = results.count('blood_cl_bottle_orange')
+        # bottle_blue_num = results.count('blood_cl_bottle_blue')
         
-        results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
+        # results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
+        results_sum = sum(results_list)
+
+        for i in range(len(results_list)):
+            results_rate[i] = results_list[i] / results_sum
         
-        mark_rate = mark_num / results_sum
-        spinal_rate = spinal_num / results_sum
-        catheter_rate = catheter_num / results_sum
-        gwire_rate = wire_num / results_sum
-        bottle_orange_rate = bottle_orange_num / results_sum
-        bottle_blue_rate = bottle_blue_num /results_sum
+
+        # 認識割合を降順ソート，インデックスを格納
+        sortedRate_indices = sorted(range(len(results_rate)), key=lambda i: results_rate[i], reverse=True)
+        
+        # bottle_blue_rate = results_list[0] /results_sum
+        # bottle_orange_rate = results_list[1] / results_sum
+        # catheter_rate = results_list[2] / results_sum
+        # gwire_rate = results_list[3] / results_sum
+        # mark_rate = results_list[4] / results_sum
+        # spinal_rate = results_list[5] / results_sum
 
         #print(f"result_rate  mark_rate:{mark_rate} spinal_rate:{spinal_rate} catheter_rate:{catheter_rate} gwire_rate:{gwire_rate} bottle_orange_rate:{bottle_orange_rate} bottle_blue_rate:{bottle_blue_rate}")
         
-        results_rate = {'mark_needle' : mark_rate, 'spinal_needle' : spinal_rate, 'central_venous_catheter' : catheter_rate, 'guide_wire' : gwire_rate, 'blood_cl_bottle_orange' : bottle_orange_rate, 'blood_cl_bottle_blue' : bottle_blue_rate}
-        results_rate = sorted(results_rate.items(), key=lambda x: x[1], reverse=True)
         
-        print(results_rate)
+        
+        # 認識割合を降順にソート
+        # results_rate = sorted(results_rate.items(), key=lambda x: x[1], reverse=True)
+        
+        print(f"results_list : {results_list}")
+        print(f"results_sum : {results_sum}")
+        print(f"results_rate : {results_rate}")
+        print(f"sortedRate_indices : {sortedRate_indices}")
 
-        top_rate_results = [results_rate[0][0]] #認識割合のトップ(複数抽出可)
-        for i in range(len(results_rate)-1):
-            if results_rate[i+1][1] == results_rate[0][1]:
-                top_rate_results.append(results_rate[i+1][0])
+        top_rate_results = [sortedRate_indices[0]] # 認識割合トップの医療機器ラベル番号(複数抽出有)
+        for i in range(len(sortedRate_indices)-1):
+            idx_top = sortedRate_indices[0]
+            idx_temp = sortedRate_indices[i+1]
+            if results_rate[idx_temp] == results_rate[idx_top]:
+                top_rate_results.append(idx_temp)
             else:
                 break
-        
-        #1種類の医療機器だけが認識率トップ場合に特定できる医療行為
+        print(f"top_rate_results : {top_rate_results}")
+        # 1種類の医療機器だけが認識率トップの場合の医療行為特定
         if len(top_rate_results) == 1:
-            if top_rate_results[0] == "mark_needle": #骨髄穿刺と判断
-                post_result = "kotuzui"
-                return post_result
-            elif top_rate_results[0] == "spinal_needle": #腰椎穿刺と判断
-                post_result = "youtui"
-                return post_result
-            #カテーテルとガイドワイヤーのどちらかが認識率トップかつ両方とも認識されている場合は中心静脈カテーテル挿入と判断
-            elif 'central_venous_catheter' in top_rate_results or 'guide_wire' in top_rate_results:
-                if catheter_rate > 0 and gwire_rate > 0: 
-                    post_result = "catheter"
-                    return post_result
-            #オレンジと青のボトルのどちらかが認識率トップかつ両方とも認識されている場合は血液培養と判断
-            elif 'blood_cl_bottle_orange' in top_rate_results or 'blood_cl_bottle_blue' in top_rate_results:
-                if bottle_orange_rate > 0 and bottle_blue_rate > 0: 
-                    post_result = "blood"
-                    return post_result
+            # 認識割合2位の医療機器(複数抽出有)
+            second_rate_results = [sortedRate_indices[1]] 
+            for j in range(len(sortedRate_indices)-2):
+                if sortedRate_indices[j+2] == sortedRate_indices[1]:
+                    top_rate_results.append(sortedRate_indices[j+2])
+                else:
+                    break
+            print(f"second_rate_results : {second_rate_results}")
             
-        #2種類の医療機器だけの認識率が最も高い場合に特定できる医療行為
+            # オレンジと青のボトルのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合は血液培養と判断
+            if top_rate_results in [0, 1]:
+                if len(second_rate_results) == 1 and second_rate_results[0] in [0, 1]: 
+                    return "blood"
+            # カテーテルとガイドワイヤーのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合はカテーテルと判断
+            elif top_rate_results in [2, 3]:
+                if len(second_rate_results) == 1 and second_rate_results[0] in [2, 3]: 
+                    return "catheter"
+            if top_rate_results[0] == 4: # 骨髄穿刺と判断
+                return "kotuzui"
+            elif top_rate_results[0] == 5: # 腰椎穿刺と判断
+                return "youtui"
+            
+        
+        # 認識割合トップが2つの場合に特定できる医療行為(3つ以上は現状特定できる医療行為無し)
         if len(top_rate_results) == 2:
-            #認識率トップの2種類がカテーテルとガイドワイヤーの場合は中心静脈カテーテル挿入と判断
-            if 'central_venous_catheter' in top_rate_results and 'guide_wire' in top_rate_results:
-                post_result = "catheter"
-                return post_result
-            elif 'blood_cl_bottle_orange' in top_rate_results and 'blood_cl_bottle_blue' in top_rate_results:
-                post_result = "blood"
-                return post_result
-            
+            if set(top_rate_results) == {0, 1}:
+                return "blood"
+            elif set(top_rate_results) == {2, 3}:
+                return  "catheter"
+        
+        print(f"post_result : {post_result}")
         return post_result
             
 
@@ -400,7 +434,7 @@ class BasePredictor:
 
             #----------------------- 認識ループ開始位置 -----------------------#
             predict_flag = True
-            predicted_label_log = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0} # 予測結果ラベルを記録しておく辞書
+            predicted_label_log = [0] * 6  # 予測結果ラベル(6種類)を記録しておく辞書
             while predict_flag:
                 print("start predict")
                 time.sleep(0.01) # 0.01秒の待機時間を設定(画像フォルダに画像が保存されるまで待機)
@@ -451,10 +485,19 @@ class BasePredictor:
                         if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
                             s += self.write_results(i, self.results, (p, im, im0))
                             label_list = self.results[i].get_prdLabel_list() # 認識結果のラベル番号をリストで取得 1枚に複数結果なら複数の番号
-                            if len(label_list) > 0:
-                                for label in range(len(label_list)):
-                                    label_num = label_list[label]
-                                    predicted_label_log[label_num] = predicted_label_log[label_num] + 1
+                            if len(label_list) > 0: # 認識結果がある場合
+                                for j in range(len(label_list)):
+                                    predicted_label_log[label_list[j]] = predicted_label_log[label_list[j]] + 1
+                                    # 認識結果から医療行為特定
+                                post_result = self.specificResult(predicted_label_log)
+                                print(f"post_result : {post_result}")
+                                try:
+                                    post_result_txt = Path.home() / 'public_html' / 'kikimiru_server' / 'post_result' / 'post_result.txt'
+                                    with open(post_result_txt, 'w') as f:
+                                        f.write(post_result)
+                                        os.chmod(post_result_txt, 0o644)
+                                except Exception as e:
+                                    LOGGER.info(f"Error in Writing Post result : {e}")
                             print(f"predicted_label_log : {predicted_label_log}")
                         if self.args.save or self.args.save_txt:
                             self.results[i].save_dir = self.save_dir.__str__()
@@ -462,7 +505,7 @@ class BasePredictor:
                             self.show(p)
                         if self.args.save and self.plotted_img is not None:
                             self.save_preds(vid_cap, i, str(self.save_dir / p.name))
-                        
+                    
                     self.run_callbacks('on_predict_batch_end')
                     yield from self.results
 
@@ -493,7 +536,7 @@ class BasePredictor:
                         files_in_folder = os.listdir(folder_path)
                         if len(files_in_folder) > 0:
                             break
-                        if time.time() - time_predict_start > 5: # 5秒間入力画像がなければ認識状態から画像待機状態に移行
+                        if time.time() - time_predict_start > 300: # 5秒間入力画像がなければ認識状態から画像待機状態に移行
                             # Release assets
                             if isinstance(self.vid_writer[-1], cv2.VideoWriter):
                                 self.vid_writer[-1].release()  # release final video writer
@@ -507,7 +550,7 @@ class BasePredictor:
                                 s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ''
                                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
                             self.run_callbacks('on_predict_end')
-                            predicted_label_log = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0}
+                            predicted_label_log = [0] * 6
                             predict_flag = False
                             break
             #----------------------- 認識ループ終了位置 -----------------------#
