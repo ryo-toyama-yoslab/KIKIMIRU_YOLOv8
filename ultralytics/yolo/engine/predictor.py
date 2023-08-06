@@ -320,9 +320,11 @@ class BasePredictor:
         # results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
         results_sum = sum(results_list)
 
-        for i in range(len(results_list)):
-            results_rate[i] = results_list[i] / results_sum
-        
+        try:
+            for i in range(len(results_list)):
+                results_rate[i] = results_list[i] / results_sum
+        except ZeroDivisionError:
+            return post_result
 
         # 認識割合を降順ソート，インデックスを格納
         sortedRate_indices = sorted(range(len(results_rate)), key=lambda i: results_rate[i], reverse=True)
@@ -360,25 +362,31 @@ class BasePredictor:
             # 認識割合2位の医療機器(複数抽出有)
             second_rate_results = [sortedRate_indices[1]] 
             for j in range(len(sortedRate_indices)-2):
-                if sortedRate_indices[j+2] == sortedRate_indices[1]:
-                    top_rate_results.append(sortedRate_indices[j+2])
+                idx_second = sortedRate_indices[1]
+                idx_second_temp = sortedRate_indices[j+2]
+                if results_rate[idx_second_temp] == results_rate[idx_second]:
+                    second_rate_results.append(idx_second_temp)
                 else:
                     break
             print(f"second_rate_results : {second_rate_results}")
             
             # オレンジと青のボトルのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合は血液培養と判断
-            if top_rate_results in [0, 1]:
-                if len(second_rate_results) == 1 and second_rate_results[0] in [0, 1]: 
+            if top_rate_results[0] in [0, 1]:
+                print(f"top_results in [0, 1] : {top_rate_results}")
+                if len(second_rate_results) == 1 and second_rate_results[0] in [0, 1]:
+                    print(f"second_results in [0, 1] : {second_rate_results[0]}")
                     return "blood"
             # カテーテルとガイドワイヤーのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合はカテーテルと判断
-            elif top_rate_results in [2, 3]:
+            elif top_rate_results[0] in [2, 3]:
+                print(f"top_results in [2, 3] : {top_rate_results}")
                 if len(second_rate_results) == 1 and second_rate_results[0] in [2, 3]: 
+                    print(f"scond_results in [2, 3] : {second_rate_results}")
                     return "catheter"
-            if top_rate_results[0] == 4: # 骨髄穿刺と判断
+            elif top_rate_results[0] == 4: # 骨髄穿刺と判断
                 return "kotuzui"
             elif top_rate_results[0] == 5: # 腰椎穿刺と判断
                 return "youtui"
-            
+        
         
         # 認識割合トップが2つの場合に特定できる医療行為(3つ以上は現状特定できる医療行為無し)
         if len(top_rate_results) == 2:
