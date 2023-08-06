@@ -269,6 +269,28 @@ class BasePredictor:
                                                   any(getattr(self.dataset, 'video_flag', [False]))):  # videos
             LOGGER.warning(STREAM_WARNING)
         self.vid_path, self.vid_writer = [None] * self.dataset.bs, [None] * self.dataset.bs
+    
+    def write_postdata(self, path, post_data):
+        """
+        Write data for post specify result to application
+        """
+        try:
+            with open(path, 'w') as f:
+                f.write(post_data)
+                os.chmod(path, 0o644)
+        except Exception as e:
+            LOGGER.info(f"Error in Writing Post result : {e}")
+
+    def reset_postdata(self, path):
+        """
+        Reset data for post post specify result to application
+        """
+        try:
+            with open(path, 'w') as f:
+                f.write("")
+                os.chmod(path, 0o644)
+        except Exception as e:
+            LOGGER.info(f"Error in Writing Post result : {e}")
 
     class MyHandler(FileSystemEventHandler):
 
@@ -425,6 +447,7 @@ class BasePredictor:
 
         while True:# 認識対象画像フォルダの変更を監視 新規画像が入ってきたら認識ループに入る
             folder_path = source if source is not None else self.args.source
+            post_result_path = Path.home() / 'public_html' / 'kikimiru_server' / 'post_result' / 'post_result.txt'
             print("start watch_folder")
             self.watch_folder(folder_path)
             print("end watch_folder")
@@ -496,16 +519,10 @@ class BasePredictor:
                             if len(label_list) > 0: # 認識結果がある場合
                                 for j in range(len(label_list)):
                                     predicted_label_log[label_list[j]] = predicted_label_log[label_list[j]] + 1
-                                    # 認識結果から医療行為特定
+                                # 認識結果から医療行為特定
                                 post_result = self.specificResult(predicted_label_log)
                                 print(f"post_result : {post_result}")
-                                try:
-                                    post_result_txt = Path.home() / 'public_html' / 'kikimiru_server' / 'post_result' / 'post_result.txt'
-                                    with open(post_result_txt, 'w') as f:
-                                        f.write(post_result)
-                                        os.chmod(post_result_txt, 0o644)
-                                except Exception as e:
-                                    LOGGER.info(f"Error in Writing Post result : {e}")
+                                self.write_postdata(post_result_path, post_result)
                             print(f"predicted_label_log : {predicted_label_log}")
                         if self.args.save or self.args.save_txt:
                             self.results[i].save_dir = self.save_dir.__str__()
@@ -526,8 +543,14 @@ class BasePredictor:
                     path_to_move = self.save_dir / 'predicted_image' /  file_name
 
                     try:
-                        shutil.move(str(p), str(path_to_move))
-                        os.chmod(str(path_to_move),0o740)
+                        # 画像をコピー
+                        if shutil.copy(p, path_to_move):
+                            os.chmod(str(path_to_move),0o740)
+                            # 元画像を削除
+                            os.remove(p)
+                        else:
+                            print(f"Failed to copy original image : {p}")
+                        # shutil.move(str(p), str(path_to_move))
                     except FileNotFoundError:
                         print("File not found from which to move")
                     except PermissionError:
@@ -558,8 +581,10 @@ class BasePredictor:
                                 s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ''
                                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
                             self.run_callbacks('on_predict_end')
-                            predicted_label_log = [0] * 6
-                            predict_flag = False
+
+                            self.reset_postdata(post_result_path) # postデータと画像保存フォルダのリセット
+                            predicted_label_log = [0] * 6 # 認識結果を初期化
+                            predict_flag = False # 認識状態をFalseに
                             break
             #----------------------- 認識ループ終了位置 -----------------------#
         
