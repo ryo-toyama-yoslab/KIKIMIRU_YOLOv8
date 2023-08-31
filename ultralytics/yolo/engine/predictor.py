@@ -132,10 +132,10 @@ class BasePredictor:
         # Dump data to file in YAML format
         with open(file, 'w') as f:
             yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-    
+
     def setting_dir_yaml_load(file="", append_filename=False):
         file = file = Path().home() / "yolov8_config/Predict/save_dir.yaml"
-        
+
         with open(file, errors='ignore', encoding='utf-8') as f:
             s = f.read()  # string
 
@@ -153,22 +153,22 @@ class BasePredictor:
         "yolov8_config/Predict/save_dir.yaml"で保存されている出力先フォルダを読み込み
         '''
         save_file_setting = self.setting_dir_yaml_load() # 現在時間を名前にしたフォルダ名を読み込む
-        
+
         return increment_path(Path(project) / save_file_setting['time'], exist_ok=self.args.exist_ok)
-    
+
     def setting_save_dir(self):
 
         # アプリが開始されたことを検知した時間で作られるフォルダパスを読み書きするファイル
         file = Path().home() / "yolov8_config/Predict/save_dir.yaml"
 
         dt_now = datetime.datetime.now()
-        
+
         defaults = {
             'time': dt_now.strftime('%Y%m%d%H%M%S') # now time
             }
-        
+
         self.yaml_save(file, defaults)
-    
+
 
     def preprocess(self, im):
         """Prepares input image before inference.
@@ -269,7 +269,7 @@ class BasePredictor:
                                                   any(getattr(self.dataset, 'video_flag', [False]))):  # videos
             LOGGER.warning(STREAM_WARNING)
         self.vid_path, self.vid_writer = [None] * self.dataset.bs, [None] * self.dataset.bs
-    
+
     def write_postdata(self, path, post_data):
         """
         Write data for post specify result to application
@@ -312,7 +312,7 @@ class BasePredictor:
                 time.sleep(0.01) # 監視処理の間隔を0.01秒にして負荷軽減
         except KeyboardInterrupt:
             sys.exit()
-    
+
     # Specific medical practice
     def specificResult(self, results_list): # ラベル番号と認識数の辞書型リストが引数
         """
@@ -324,9 +324,9 @@ class BasePredictor:
         4 : 'mark_needle'
         5 : 'spinal_needle'
         """
-        
+
         # 特定できないときはunknown
-        post_result = "unknown" 
+        post_result = "unknown"
 
         # 各医療機器認識割合を格納するリスト
         results_rate = [0] * 6
@@ -338,7 +338,7 @@ class BasePredictor:
         # wire_num = results.count('guide_wire')
         # bottle_orange_num = results.count('blood_cl_bottle_orange')
         # bottle_blue_num = results.count('blood_cl_bottle_blue')
-        
+
         # results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
         results_sum = sum(results_list)
 
@@ -350,7 +350,7 @@ class BasePredictor:
 
         # 認識割合を降順ソート，インデックスを格納
         sortedRate_indices = sorted(range(len(results_rate)), key=lambda i: results_rate[i], reverse=True)
-        
+
         # bottle_blue_rate = results_list[0] /results_sum
         # bottle_orange_rate = results_list[1] / results_sum
         # catheter_rate = results_list[2] / results_sum
@@ -359,12 +359,12 @@ class BasePredictor:
         # spinal_rate = results_list[5] / results_sum
 
         #print(f"result_rate  mark_rate:{mark_rate} spinal_rate:{spinal_rate} catheter_rate:{catheter_rate} gwire_rate:{gwire_rate} bottle_orange_rate:{bottle_orange_rate} bottle_blue_rate:{bottle_blue_rate}")
-        
-        
-        
+
+
+
         # 認識割合を降順にソート
         # results_rate = sorted(results_rate.items(), key=lambda x: x[1], reverse=True)
-        
+
         print(f"results_list : {results_list}")
         print(f"results_sum : {results_sum}")
         print(f"results_rate : {results_rate}")
@@ -382,7 +382,7 @@ class BasePredictor:
         # 1種類の医療機器だけが認識率トップの場合の医療行為特定
         if len(top_rate_results) == 1:
             # 認識割合2位の医療機器(複数抽出有)
-            second_rate_results = [sortedRate_indices[1]] 
+            second_rate_results = [sortedRate_indices[1]]
             for j in range(len(sortedRate_indices)-2):
                 idx_second = sortedRate_indices[1]
                 idx_second_temp = sortedRate_indices[j+2]
@@ -391,7 +391,7 @@ class BasePredictor:
                 else:
                     break
             print(f"second_rate_results : {second_rate_results}")
-            
+
             # オレンジと青のボトルのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合は血液培養と判断
             if top_rate_results[0] in [0, 1]:
                 print(f"top_results in [0, 1] : {top_rate_results}")
@@ -401,25 +401,25 @@ class BasePredictor:
             # カテーテルとガイドワイヤーのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合はカテーテルと判断
             elif top_rate_results[0] in [2, 3]:
                 print(f"top_results in [2, 3] : {top_rate_results}")
-                if len(second_rate_results) == 1 and second_rate_results[0] in [2, 3]: 
+                if len(second_rate_results) == 1 and second_rate_results[0] in [2, 3]:
                     print(f"scond_results in [2, 3] : {second_rate_results}")
                     return "catheter"
             elif top_rate_results[0] == 4: # 骨髄穿刺と判断
                 return "kotuzui"
             elif top_rate_results[0] == 5: # 腰椎穿刺と判断
                 return "youtui"
-        
-        
+
+
         # 認識割合トップが2つの場合に特定できる医療行為(3つ以上は現状特定できる医療行為無し)
         if len(top_rate_results) == 2:
             if set(top_rate_results) == {0, 1}:
                 return "blood"
             elif set(top_rate_results) == {2, 3}:
                 return  "catheter"
-        
+
         print(f"post_result : {post_result}")
         return post_result
-            
+
 
     @smart_inference_mode()
     def stream_inference(self, source=None, model=None, *args, **kwargs):
@@ -432,7 +432,7 @@ class BasePredictor:
             self.setup_model(model)
 
         '''この場所に処理を追加
-        
+
         1. 認識対象画像が保存されるフォルダに画像が来たかを監視する処理
 
         2. 画像保存を確認したらその時間を元に出力先のフォルダを作成
@@ -473,7 +473,7 @@ class BasePredictor:
                 # Setup source every time predict is called - 認識対象画像データ読み込み
                 self.setup_source(source if source is not None else self.args.source)
 
-                # Warmup model 
+                # Warmup model
                 if not self.done_warmup:
                     self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
                     self.done_warmup = True
@@ -530,14 +530,14 @@ class BasePredictor:
                             self.show(p)
                         if self.args.save and self.plotted_img is not None:
                             self.save_preds(vid_cap, i, str(self.save_dir / p.name))
-                    
+
                     self.run_callbacks('on_predict_batch_end')
                     yield from self.results
 
                     # Print time (inference-only)
                     if self.args.verbose:
                         LOGGER.info(f'{s}{profilers[1].dt * 1E3:.1f}ms')
-                    
+
                     # 認識済み画像kikimiru_detection/yolov8_results/{推論開始時間}/predicted_imageフォルダ
                     file_name = os.path.basename(p)
                     path_to_move = self.save_dir / 'predicted_image' /  file_name
@@ -557,7 +557,7 @@ class BasePredictor:
                         print("The source or destination file does not have access permissions")
                     except shutil.Error as e:
                         print(f"Failed to move file : {e}")
-                
+
                 # 認識対象画像フォルダに画像があるかを確認
                 files_in_folder = os.listdir(folder_path)
                 if len(files_in_folder) == 0:
@@ -587,7 +587,7 @@ class BasePredictor:
                             predict_flag = False # 認識状態をFalseに
                             break
             #----------------------- 認識ループ終了位置 -----------------------#
-        
+
 
     def setup_model(self, model, verbose=True):
         """Initialize YOLO model with given parameters and set it to evaluation mode."""
