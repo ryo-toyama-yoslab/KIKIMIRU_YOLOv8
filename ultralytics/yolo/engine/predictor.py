@@ -409,7 +409,6 @@ class BasePredictor:
             elif top_rate_results[0] == 5: # 腰椎穿刺と判断
                 return "youtui"
 
-
         # 認識割合トップが2つの場合に特定できる医療行為(3つ以上は現状特定できる医療行為無し)
         if len(top_rate_results) == 2:
             if set(top_rate_results) == {0, 1}:
