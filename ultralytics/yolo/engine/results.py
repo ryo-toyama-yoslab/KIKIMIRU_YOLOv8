@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import os
 import torch
 
 from ultralytics.yolo.data.augment import LetterBox
@@ -284,6 +285,7 @@ class Results(SimpleClass):
         probs = self.probs
         kpts = self.keypoints
         texts = []
+        
         if probs is not None:
             # Classify 分類タスクなので物体検出タスクでは関係ない
             [texts.append(f'{probs.data[j]:.2f} {self.names[j]}') for j in probs.top5]
@@ -305,9 +307,21 @@ class Results(SimpleClass):
                     line += (*kpt.reshape(-1).tolist(), )
                 line += (conf, ) * save_conf + (() if id is None else (id, ))
                 texts.append(('%g ' * len(line)).rstrip() % line)
+        
         if texts:
             with open(txt_file, 'a') as f:
                 f.writelines(text + '\n' for text in texts)
+                os.chmod(txt_file, 0o644)
+    
+    def get_prdLabel_list(self):
+        boxes = self.boxes
+        label_list = []
+        if boxes:
+            for j, d in enumerate(boxes):
+                cls= int(d.cls)
+                label_list.append(cls)
+
+        return label_list
 
     def save_crop(self, save_dir, file_name=Path('im.jpg')):
         """

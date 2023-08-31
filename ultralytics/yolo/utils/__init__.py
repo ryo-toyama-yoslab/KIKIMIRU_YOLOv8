@@ -734,7 +734,7 @@ def get_settings(file=SETTINGS_YAML, version='0.1'):
         'datasets_dir': 'temp_img',  # default datasets directory.
         'source': 'image_dir',
         'weights_dir': 'model_weights/best.pt',  # default weights directory.
-        'runs_dir': 'kikimiru_detection/yolov8_results',  # default runs directory.
+        'runs_dir': 'public_html/kikimiru_server/detected_results',  # default runs directory.
         'uuid': hashlib.sha256(str(uuid.getnode()).encode()).hexdigest(),  # SHA-256 anonymized UUID hash
         'sync': True,  # sync analytics to help with YOLO development
         'api_key': '',  # Ultralytics HUB API key (https://hub.ultralytics.com/)

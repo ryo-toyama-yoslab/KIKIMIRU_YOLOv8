@@ -237,7 +237,6 @@ class BasePredictor:
             result.save_txt(f'{self.txt_path}.txt', save_conf=self.args.save_conf)
         if self.args.save_crop:
             result.save_crop(save_dir=self.save_dir / 'crops', file_name=self.data_path.stem)
-
         return log_string
 
     def postprocess(self, preds, img, orig_imgs):
@@ -270,6 +269,28 @@ class BasePredictor:
                                                   any(getattr(self.dataset, 'video_flag', [False]))):  # videos
             LOGGER.warning(STREAM_WARNING)
         self.vid_path, self.vid_writer = [None] * self.dataset.bs, [None] * self.dataset.bs
+    
+    def write_postdata(self, path, post_data):
+        """
+        Write data for post specify result to application
+        """
+        try:
+            with open(path, 'w') as f:
+                f.write(post_data)
+                os.chmod(path, 0o644)
+        except Exception as e:
+            LOGGER.info(f"Error in Writing Post result : {e}")
+
+    def reset_postdata(self, path):
+        """
+        Reset data for post post specify result to application
+        """
+        try:
+            with open(path, 'w') as f:
+                f.write("")
+                os.chmod(path, 0o644)
+        except Exception as e:
+            LOGGER.info(f"Error in Writing Post result : {e}")
 
     class MyHandler(FileSystemEventHandler):
 
@@ -291,6 +312,113 @@ class BasePredictor:
                 time.sleep(0.01) # 監視処理の間隔を0.01秒にして負荷軽減
         except KeyboardInterrupt:
             sys.exit()
+    
+    # Specific medical practice
+    def specificResult(self, results_list): # ラベル番号と認識数の辞書型リストが引数
+        """
+        results_listのインデックスとラベル名の対応
+        0 : 'blood_cl_bottle_blue'
+        1 : 'blood_cl_bottle_orange'
+        2 : 'central_venous_catheter'
+        3 : 'guide_wire'
+        4 : 'mark_needle'
+        5 : 'spinal_needle'
+        """
+        
+        # 特定できないときはunknown
+        post_result = "unknown" 
+
+        # 各医療機器認識割合を格納するリスト
+        results_rate = [0] * 6
+
+        # Start specific medical practice
+        # mark_num = results.count('mark_needle')
+        # spinal_num = results.count('spinal_needle')
+        # catheter_num = results.count('central_venous_catheter')
+        # wire_num = results.count('guide_wire')
+        # bottle_orange_num = results.count('blood_cl_bottle_orange')
+        # bottle_blue_num = results.count('blood_cl_bottle_blue')
+        
+        # results_sum = mark_num + spinal_num + catheter_num + wire_num + bottle_orange_num + bottle_blue_num
+        results_sum = sum(results_list)
+
+        try:
+            for i in range(len(results_list)):
+                results_rate[i] = results_list[i] / results_sum
+        except ZeroDivisionError:
+            return post_result
+
+        # 認識割合を降順ソート，インデックスを格納
+        sortedRate_indices = sorted(range(len(results_rate)), key=lambda i: results_rate[i], reverse=True)
+        
+        # bottle_blue_rate = results_list[0] /results_sum
+        # bottle_orange_rate = results_list[1] / results_sum
+        # catheter_rate = results_list[2] / results_sum
+        # gwire_rate = results_list[3] / results_sum
+        # mark_rate = results_list[4] / results_sum
+        # spinal_rate = results_list[5] / results_sum
+
+        #print(f"result_rate  mark_rate:{mark_rate} spinal_rate:{spinal_rate} catheter_rate:{catheter_rate} gwire_rate:{gwire_rate} bottle_orange_rate:{bottle_orange_rate} bottle_blue_rate:{bottle_blue_rate}")
+        
+        
+        
+        # 認識割合を降順にソート
+        # results_rate = sorted(results_rate.items(), key=lambda x: x[1], reverse=True)
+        
+        print(f"results_list : {results_list}")
+        print(f"results_sum : {results_sum}")
+        print(f"results_rate : {results_rate}")
+        print(f"sortedRate_indices : {sortedRate_indices}")
+
+        top_rate_results = [sortedRate_indices[0]] # 認識割合トップの医療機器ラベル番号(複数抽出有)
+        for i in range(len(sortedRate_indices)-1):
+            idx_top = sortedRate_indices[0]
+            idx_temp = sortedRate_indices[i+1]
+            if results_rate[idx_temp] == results_rate[idx_top]:
+                top_rate_results.append(idx_temp)
+            else:
+                break
+        print(f"top_rate_results : {top_rate_results}")
+        # 1種類の医療機器だけが認識率トップの場合の医療行為特定
+        if len(top_rate_results) == 1:
+            # 認識割合2位の医療機器(複数抽出有)
+            second_rate_results = [sortedRate_indices[1]] 
+            for j in range(len(sortedRate_indices)-2):
+                idx_second = sortedRate_indices[1]
+                idx_second_temp = sortedRate_indices[j+2]
+                if results_rate[idx_second_temp] == results_rate[idx_second]:
+                    second_rate_results.append(idx_second_temp)
+                else:
+                    break
+            print(f"second_rate_results : {second_rate_results}")
+            
+            # オレンジと青のボトルのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合は血液培養と判断
+            if top_rate_results[0] in [0, 1]:
+                print(f"top_results in [0, 1] : {top_rate_results}")
+                if len(second_rate_results) == 1 and second_rate_results[0] in [0, 1]:
+                    print(f"second_results in [0, 1] : {second_rate_results[0]}")
+                    return "blood"
+            # カテーテルとガイドワイヤーのどちらかが認識率トップかつもう片方が2番目に認識数が多い場合はカテーテルと判断
+            elif top_rate_results[0] in [2, 3]:
+                print(f"top_results in [2, 3] : {top_rate_results}")
+                if len(second_rate_results) == 1 and second_rate_results[0] in [2, 3]: 
+                    print(f"scond_results in [2, 3] : {second_rate_results}")
+                    return "catheter"
+            elif top_rate_results[0] == 4: # 骨髄穿刺と判断
+                return "kotuzui"
+            elif top_rate_results[0] == 5: # 腰椎穿刺と判断
+                return "youtui"
+        
+        
+        # 認識割合トップが2つの場合に特定できる医療行為(3つ以上は現状特定できる医療行為無し)
+        if len(top_rate_results) == 2:
+            if set(top_rate_results) == {0, 1}:
+                return "blood"
+            elif set(top_rate_results) == {2, 3}:
+                return  "catheter"
+        
+        print(f"post_result : {post_result}")
+        return post_result
             
 
     @smart_inference_mode()
@@ -319,6 +447,7 @@ class BasePredictor:
 
         while True:# 認識対象画像フォルダの変更を監視 新規画像が入ってきたら認識ループに入る
             folder_path = source if source is not None else self.args.source
+            post_result_path = Path.home() / 'public_html' / 'kikimiru_server' / 'post_result' / 'post_result.txt'
             print("start watch_folder")
             self.watch_folder(folder_path)
             print("end watch_folder")
@@ -336,6 +465,7 @@ class BasePredictor:
 
             #----------------------- 認識ループ開始位置 -----------------------#
             predict_flag = True
+            predicted_label_log = [0] * 6  # 予測結果ラベル(6種類)を記録しておく辞書
             while predict_flag:
                 print("start predict")
                 time.sleep(0.01) # 0.01秒の待機時間を設定(画像フォルダに画像が保存されるまで待機)
@@ -383,16 +513,24 @@ class BasePredictor:
                         im : 元画像の正規化済み画素値行列
                         im0 : 元画像の画素値行列
                         '''
-
                         if self.args.verbose or self.args.save or self.args.save_txt or self.args.show:
                             s += self.write_results(i, self.results, (p, im, im0))
+                            label_list = self.results[i].get_prdLabel_list() # 認識結果のラベル番号をリストで取得 1枚に複数結果なら複数の番号
+                            if len(label_list) > 0: # 認識結果がある場合
+                                for j in range(len(label_list)):
+                                    predicted_label_log[label_list[j]] = predicted_label_log[label_list[j]] + 1
+                                # 認識結果から医療行為特定
+                                post_result = self.specificResult(predicted_label_log)
+                                print(f"post_result : {post_result}")
+                                self.write_postdata(post_result_path, post_result)
+                            print(f"predicted_label_log : {predicted_label_log}")
                         if self.args.save or self.args.save_txt:
                             self.results[i].save_dir = self.save_dir.__str__()
                         if self.args.show and self.plotted_img is not None:
                             self.show(p)
                         if self.args.save and self.plotted_img is not None:
                             self.save_preds(vid_cap, i, str(self.save_dir / p.name))
-                        
+                    
                     self.run_callbacks('on_predict_batch_end')
                     yield from self.results
 
@@ -405,7 +543,14 @@ class BasePredictor:
                     path_to_move = self.save_dir / 'predicted_image' /  file_name
 
                     try:
-                        shutil.move(str(p), str(path_to_move))
+                        # 画像をコピー
+                        if shutil.copy(p, path_to_move):
+                            os.chmod(str(path_to_move),0o740)
+                            # 元画像を削除
+                            os.remove(p)
+                        else:
+                            print(f"Failed to copy original image : {p}")
+                        # shutil.move(str(p), str(path_to_move))
                     except FileNotFoundError:
                         print("File not found from which to move")
                     except PermissionError:
@@ -417,13 +562,12 @@ class BasePredictor:
                 files_in_folder = os.listdir(folder_path)
                 if len(files_in_folder) == 0:
                     time_predict_start = time.time()
-                    print("no image in folder, so wait for 5 seconds")
                     while True:
                         time.sleep(0.001) # 0.001秒の待機時間を設定(画像があるかを確認する間隔)
                         files_in_folder = os.listdir(folder_path)
                         if len(files_in_folder) > 0:
                             break
-                        if time.time() - time_predict_start > 5: # 5秒間入力画像がなければ認識状態から画像待機状態に移行
+                        if time.time() - time_predict_start > 300: # 5秒間入力画像がなければ認識状態から画像待機状態に移行
                             # Release assets
                             if isinstance(self.vid_writer[-1], cv2.VideoWriter):
                                 self.vid_writer[-1].release()  # release final video writer
@@ -438,7 +582,9 @@ class BasePredictor:
                                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
                             self.run_callbacks('on_predict_end')
 
-                            predict_flag = False
+                            self.reset_postdata(post_result_path) # postデータと画像保存フォルダのリセット
+                            predicted_label_log = [0] * 6 # 認識結果を初期化
+                            predict_flag = False # 認識状態をFalseに
                             break
             #----------------------- 認識ループ終了位置 -----------------------#
         
@@ -473,6 +619,7 @@ class BasePredictor:
         # Save imgs
         if self.dataset.mode == 'image':
             cv2.imwrite(save_path, im0)
+            os.chmod(save_path,0o740)
         else:  # 'video' or 'stream'
             if self.vid_path[idx] != save_path:  # new video
                 self.vid_path[idx] = save_path
